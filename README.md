@@ -26,7 +26,7 @@ Omdat dit een volledig op zichzelf staande HTML-applicatie is, is er geen comple
 Download het project:
 Clone of download de repository naar uw lokale machine.
 
-git clone https://github.com/UW_GEBRUIKERSNAAM/UW_REPOSITORY.git
+git clone https://github.com/PJPRORL/RepairCenter.git
 
 Open het bestand:
 Navigeer naar de projectmap en open het index.html (of de naam die u aan het HTML-bestand heeft gegeven) rechtstreeks in een moderne web browser zoals Chrome, Firefox of Edge.
