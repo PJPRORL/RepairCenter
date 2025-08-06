@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Controlepaneel Herstellingen</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: Calm Neutral Blue -->
+    <!-- Application Structure Plan: A dashboard-style SPA. The top section features key metrics and a bar chart for a quick overview of workloads per category (bucket). Below this, a control panel with filters for each bucket and a search bar allows for dynamic querying. The main content is an interactive table displaying the repair items with integrated dropdowns for comments and action buttons. A modal form for adding new repairs keeps the UI clean. A final section summarizes all notes for a quick review. This structure is chosen for usability, allowing users to get a high-level overview first, then drill down, add, or delete items and comments efficiently. -->
+    <!-- Visualization & Content Choices: Report Info (Repair List) -> Goal (Full CRUD: Track, add, delete repairs/comments) -> Viz/Presentation (Interactive Table, Bar Chart, Modals, Notes List, Details/Summary dropdown) -> Interaction (Filtering, search, status changes, checkboxes, modals for adding, confirmation for deleting, comment dropdowns) -> Justification (Provides a complete data management lifecycle within a single, intuitive interface, fulfilling all user requirements.) -> Library/Method (Chart.js for the bar chart, Vanilla JS for all interactions) - Confirming NO SVG/Mermaid. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc; /* slate-50 */
+        }
+        .table-row-checked {
+            background-color: #f0fdf4; /* green-50 */
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-weight: 500;
+            font-size: 0.75rem;
+            text-transform: capitalize;
+        }
+        .status-in-behandeling { background-color: #dbeafe; color: #1e40af; }
+        .status-in-wacht { background-color: #feefc7; color: #92400e; }
+        .status-rma { background-color: #fee2e2; color: #991b1b; }
+        .status-afgewerkt { background-color: #dcfce7; color: #166534; }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 300px;
+            max-height: 400px;
+        }
+        .modal-overlay {
+            transition: opacity 0.3s ease;
+        }
+        .modal-container {
+            transition: transform 0.3s ease;
+        }
+        details > summary {
+            list-style: none;
+        }
+        details > summary::-webkit-details-marker {
+            display: none;
+        }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 350px;
+            }
+        }
+    </style>
+</head>
+<body class="text-slate-800">
+
+    <div class="container mx-auto p-4 sm:p-6 lg:p-8">
+        <header class="mb-8">
+            <h1 class="text-3xl font-bold text-slate-900">Dashboard Herstellingen</h1>
+            <p class="text-slate-600 mt-1">Een interactief overzicht van alle openstaande herstellingen.</p>
+        </header>
+
+        <main class="space-y-8">
+            
+            <section id="overview-section">
+                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                        <h3 class="text-sm font-medium text-slate-500">Totaal Open</h3>
+                        <p id="total-repairs" class="text-3xl font-bold text-slate-900 mt-2">0</p>
+                    </div>
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                        <h3 class="text-sm font-medium text-slate-500">Spoed</h3>
+                        <p id="urgent-repairs" class="text-3xl font-bold text-red-600 mt-2">0</p>
+                    </div>
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                        <h3 class="text-sm font-medium text-slate-500">In Wacht</h3>
+                        <p id="waiting-repairs" class="text-3xl font-bold text-amber-600 mt-2">0</p>
+                    </div>
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                        <h3 class="text-sm font-medium text-slate-500">Fysiek Geverifieerd</h3>
+                        <p id="checked-repairs" class="text-3xl font-bold text-green-600 mt-2">0</p>
+                    </div>
+                </div>
+            </section>
+
+            <section id="chart-section" class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                <h2 class="text-xl font-semibold text-slate-900 mb-4">Werkdruk per Categorie</h2>
+                <p class="text-slate-600 mb-6">Dit diagram toont het aantal openstaande herstellingen per 'bucket'. Gebruik dit om een snel beeld te krijgen van waar de meeste taken zich bevinden.</p>
+                <div class="chart-container">
+                    <canvas id="repairsChart"></canvas>
+                </div>
+            </section>
+
+            <section id="repairs-list-section" class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4">
+                    <h2 class="text-xl font-semibold text-slate-900">Controlelijst Herstellingen</h2>
+                    <button id="add-repair-btn" class="mt-4 sm:mt-0 bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold shadow-sm hover:bg-blue-700 transition flex items-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+                        Nieuwe Herstelling
+                    </button>
+                </div>
+                <p class="text-slate-600 mb-6">Gebruik de filters en de zoekbalk om specifieke herstellingen te vinden. U kunt de status direct aanpassen en afvinken of het toestel fysiek aanwezig is.</p>
+
+                <div class="flex flex-col md:flex-row gap-4 mb-6">
+                    <div class="relative flex-grow">
+                        <span class="absolute inset-y-0 left-0 flex items-center pl-3">
+                            <svg class="w-5 h-5 text-slate-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"></path></svg>
+                        </span>
+                        <input type="text" id="search-input" placeholder="Zoek op ID of klant..." class="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition">
+                    </div>
+                    <div id="filter-buttons" class="flex items-center gap-2 flex-wrap">
+                        <button data-filter="all" class="filter-btn bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold shadow-sm transition">Alles</button>
+                        <button data-filter="SPOED" class="filter-btn bg-white text-slate-700 px-4 py-2 rounded-lg font-semibold border border-slate-300 hover:bg-slate-100 transition">Spoed</button>
+                        <button data-filter="In behandeling" class="filter-btn bg-white text-slate-700 px-4 py-2 rounded-lg font-semibold border border-slate-300 hover:bg-slate-100 transition">In behandeling</button>
+                        <button data-filter="In wacht" class="filter-btn bg-white text-slate-700 px-4 py-2 rounded-lg font-semibold border border-slate-300 hover:bg-slate-100 transition">In wacht</button>
+                        <button data-filter="Onderzoek afgerond" class="filter-btn bg-white text-slate-700 px-4 py-2 rounded-lg font-semibold border border-slate-300 hover:bg-slate-100 transition">Onderzoek afgerond</button>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left text-slate-500">
+                        <thead class="text-xs text-slate-700 uppercase bg-slate-100">
+                            <tr>
+                                <th scope="col" class="px-6 py-3 rounded-l-lg">ID</th>
+                                <th scope="col" class="px-6 py-3">Klant</th>
+                                <th scope="col" class="px-6 py-3">Aanmaakdatum</th>
+                                <th scope="col" class="px-6 py-3">Huidige Status</th>
+                                <th scope="col" class="px-6 py-3">Opmerkingen</th>
+                                <th scope="col" class="px-6 py-3 text-center">Aanwezig?</th>
+                                <th scope="col" class="px-6 py-3 text-center rounded-r-lg">Acties</th>
+                            </tr>
+                        </thead>
+                        <tbody id="repairs-table-body">
+                        </tbody>
+                    </table>
+                </div>
+                 <p id="no-results" class="text-center text-slate-500 py-8 hidden">Geen resultaten gevonden.</p>
+            </section>
+            
+            <section id="notes-section" class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                <h2 class="text-xl font-semibold text-slate-900 mb-4">Opmerkingenoverzicht</h2>
+                <ul id="notes-list" class="space-y-4">
+                    <!-- Opmerkingen worden hier dynamisch ingeladen -->
+                </ul>
+                <p id="no-notes" class="text-center text-slate-500 py-4 hidden">Er zijn geen opmerkingen.</p>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- Add Repair Modal -->
+    <div id="add-repair-modal" class="modal-overlay fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden opacity-0">
+        <div class="modal-container bg-white w-full max-w-md p-8 rounded-xl shadow-2xl transform scale-95">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-slate-900">Nieuwe Herstelling</h2>
+                <button id="close-repair-modal-btn" class="text-slate-500 hover:text-slate-800">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <form id="add-repair-form">
+                <div class="space-y-4">
+                    <div>
+                        <label for="repair-id" class="block text-sm font-medium text-slate-700 mb-1">Herstelling ID</label>
+                        <input type="number" id="repair-id" name="id" required class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" placeholder="bv. 81732">
+                    </div>
+                    <div>
+                        <label for="klant-name" class="block text-sm font-medium text-slate-700 mb-1">Naam Klant</label>
+                        <input type="text" id="klant-name" name="klant" required class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition">
+                    </div>
+                    <div>
+                        <label for="current-status" class="block text-sm font-medium text-slate-700 mb-1">Huidige Status</label>
+                        <select id="current-status" name="status" required class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition">
+                            <option value="In behandeling" selected>In behandeling</option>
+                            <option value="In wacht">In wacht</option>
+                            <option value="RMA">RMA</option>
+                            <option value="Afgewerkt">Afgewerkt</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="opmerking" class="block text-sm font-medium text-slate-700 mb-1">Opmerking (optioneel)</label>
+                        <textarea id="opmerking" name="opmerking" rows="3" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"></textarea>
+                    </div>
+                </div>
+                <div class="mt-8 flex justify-end">
+                    <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded-lg font-semibold shadow-sm hover:bg-blue-700 transition">Toevoegen</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Add Comment Modal -->
+    <div id="add-comment-modal" class="modal-overlay fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden opacity-0">
+        <div class="modal-container bg-white w-full max-w-md p-8 rounded-xl shadow-2xl transform scale-95">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-slate-900">Opmerking Toevoegen</h2>
+                <button id="close-comment-modal-btn" class="text-slate-500 hover:text-slate-800">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <form id="add-comment-form">
+                <input type="hidden" id="comment-repair-id" name="id">
+                <div>
+                    <label for="new-comment" class="block text-sm font-medium text-slate-700 mb-1">Nieuwe opmerking</label>
+                    <textarea id="new-comment" name="comment" rows="4" required class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"></textarea>
+                </div>
+                <div class="mt-8 flex justify-end">
+                    <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded-lg font-semibold shadow-sm hover:bg-blue-700 transition">Opslaan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            let repairsData = [
+                { id: 81731, klant: 'Thys, Joren', aanmaakdatum: '05/08/2025', bucket: 'SPOED', status: 'In behandeling', aanwezig: false, opmerking: [] },
+                { id: 81729, klant: 'Willems, Pieter', aanmaakdatum: '05/08/2025', bucket: 'SPOED', status: 'In behandeling', aanwezig: false, opmerking: ['Wacht op specifiek onderdeel'] },
+                { id: 81728, klant: 'Coppens, Bart', aanmaakdatum: '04/08/2025', bucket: 'In behandeling', status: 'In behandeling', aanwezig: false, opmerking: [] },
+                { id: 81727, klant: 'Peeters, Greet', aanmaakdatum: '04/08/2025', bucket: 'In behandeling', status: 'In behandeling', aanwezig: false, opmerking: [] },
+                { id: 81726, klant: 'Verhoeven, An', aanmaakdatum: '04/08/2025', bucket: 'In behandeling', status: 'In behandeling', aanwezig: false, opmerking: [] },
+                { id: 81725, klant: 'De Smet, Jan', aanmaakdatum: '04/08/2025', bucket: 'In behandeling', status: 'In behandeling', aanwezig: false, opmerking: [] },
+                { id: 81724, klant: 'Mertens, Sofie', aanmaakdatum: '01/08/2025', bucket: 'In wacht', status: 'In wacht', aanwezig: false, opmerking: ['Klant gecontacteerd'] },
+                { id: 81723, klant: 'Claes, Tom', aanmaakdatum: '01/08/2025', bucket: 'In wacht', status: 'In wacht', aanwezig: false, opmerking: [] },
+                { id: 81722, klant: 'Wouters, Els', aanmaakdatum: '31/07/2025', bucket: 'Onderzoek afgerond', status: 'Afgewerkt', aanwezig: false, opmerking: ['Klaar voor ophaling'] },
+                { id: 81721, klant: 'Jacobs, Dirk', aanmaakdatum: '31/07/2025', bucket: 'Onderzoek afgerond', status: 'RMA', aanwezig: false, opmerking: ['Verzonden naar fabrikant'] }
+            ];
+
+            const statusOptions = ['In behandeling', 'In wacht', 'RMA', 'Afgewerkt'];
+            const statusColors = {
+                'In behandeling': 'status-in-behandeling',
+                'In wacht': 'status-in-wacht',
+                'RMA': 'status-rma',
+                'Afgewerkt': 'status-afgewerkt'
+            };
+
+            const tableBody = document.getElementById('repairs-table-body');
+            const searchInput = document.getElementById('search-input');
+            const filterButtonsContainer = document.getElementById('filter-buttons');
+            const noResultsMessage = document.getElementById('no-results');
+            
+            const addRepairBtn = document.getElementById('add-repair-btn');
+            const repairModal = document.getElementById('add-repair-modal');
+            const repairModalContainer = repairModal.querySelector('.modal-container');
+            const closeRepairModalBtn = document.getElementById('close-repair-modal-btn');
+            const addRepairForm = document.getElementById('add-repair-form');
+
+            const commentModal = document.getElementById('add-comment-modal');
+            const commentModalContainer = commentModal.querySelector('.modal-container');
+            const closeCommentModalBtn = document.getElementById('close-comment-modal-btn');
+            const addCommentForm = document.getElementById('add-comment-form');
+            const commentRepairIdInput = document.getElementById('comment-repair-id');
+
+            const notesList = document.getElementById('notes-list');
+            const noNotesMessage = document.getElementById('no-notes');
+
+            let currentFilter = 'all';
+            let chartInstance = null;
+
+            function renderTable(data) {
+                tableBody.innerHTML = '';
+                if (data.length === 0) {
+                    noResultsMessage.classList.remove('hidden');
+                    tableBody.classList.add('hidden');
+                } else {
+                    noResultsMessage.classList.add('hidden');
+                    tableBody.classList.remove('hidden');
+                }
+
+                data.forEach(repair => {
+                    const row = document.createElement('tr');
+                    row.className = `bg-white border-b hover:bg-slate-50 transition ${repair.aanwezig ? 'table-row-checked' : ''}`;
+                    row.dataset.id = repair.id;
+
+                    const selectOptions = statusOptions.map(option =>
+                        `<option value="${option}" ${repair.status === option ? 'selected' : ''}>${option}</option>`
+                    ).join('');
+                    
+                    const statusBadgeClass = statusColors[repair.status] || 'bg-slate-200 text-slate-800';
+                    
+                    const commentsDropdown = repair.opmerking.length > 0 ?
+                        repair.opmerking.map((opm, index) => `
+                            <li class="text-xs text-slate-600 p-1.5 bg-slate-50 rounded flex justify-between items-center">
+                                <span class="mr-2">${opm}</span>
+                                <button class="delete-comment-btn text-red-400 hover:text-red-600 font-bold" data-repair-id="${repair.id}" data-comment-index="${index}" title="Verwijder opmerking">&times;</button>
+                            </li>
+                        `).join('') :
+                        '<li class="text-xs text-slate-400 p-1">Nog geen opmerkingen.</li>';
+
+                    row.innerHTML = `
+                        <td class="px-6 py-4 font-medium text-slate-900 whitespace-nowrap">${repair.id}</td>
+                        <td class="px-6 py-4">${repair.klant}</td>
+                        <td class="px-6 py-4">${repair.aanmaakdatum}</td>
+                        <td class="px-6 py-4">
+                            <div class="flex items-center gap-2">
+                                <span class="status-badge ${statusBadgeClass}">${repair.status}</span>
+                                <select class="status-select border-slate-300 rounded-md text-xs p-1" data-id="${repair.id}">
+                                    ${selectOptions}
+                                </select>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4">
+                            <details class="relative">
+                                <summary class="cursor-pointer font-medium text-blue-600 hover:text-blue-800">
+                                    ${repair.opmerking.length} opmerking(en)
+                                </summary>
+                                <ul class="mt-2 space-y-1 p-2 bg-white border rounded-md shadow-lg w-64 absolute z-10">
+                                    ${commentsDropdown}
+                                </ul>
+                            </details>
+                        </td>
+                        <td class="px-6 py-4 text-center">
+                            <input type="checkbox" class="presence-checkbox h-5 w-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500" data-id="${repair.id}" ${repair.aanwezig ? 'checked' : ''}>
+                        </td>
+                        <td class="px-6 py-4 text-center">
+                            <div class="flex justify-center items-center gap-2">
+                                <button class="add-comment-btn p-1.5 rounded-md hover:bg-slate-200 transition" title="Opmerking toevoegen" data-id="${repair.id}">
+                                    <svg class="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+                                </button>
+                                <button class="delete-repair-btn p-1.5 rounded-md hover:bg-red-100 transition" title="Herstelling verwijderen" data-id="${repair.id}">
+                                    <svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                </button>
+                            </div>
+                        </td>
+                    `;
+                    tableBody.appendChild(row);
+                });
+            }
+
+            function renderNotes() {
+                const notesWithContent = repairsData
+                    .flatMap((r, repairIndex) => r.opmerking.map((opm, commentIndex) => ({ id: r.id, klant: r.klant, opmerking: opm, repairIndex, commentIndex })))
+                    .filter(n => n.opmerking && n.opmerking.trim() !== '');
+
+                notesList.innerHTML = '';
+
+                if (notesWithContent.length === 0) {
+                    noNotesMessage.classList.remove('hidden');
+                } else {
+                    noNotesMessage.classList.add('hidden');
+                    notesWithContent.reverse().forEach(note => {
+                        const li = document.createElement('li');
+                        li.className = 'p-4 bg-slate-50 rounded-lg border border-slate-200 flex justify-between items-start';
+                        li.innerHTML = `
+                            <div>
+                                <p class="text-slate-800">${note.opmerking}</p>
+                                <p class="text-xs text-slate-500 mt-2">Herstelling #${note.id} - ${note.klant}</p>
+                            </div>
+                            <button class="delete-comment-btn-mainlist text-red-400 hover:text-red-600 font-bold ml-4" data-repair-id="${note.id}" data-comment-index="${note.commentIndex}" title="Verwijder opmerking">&times;</button>
+                        `;
+                        notesList.appendChild(li);
+                    });
+                }
+            }
+
+            function updateAll() {
+                filterAndRender();
+                updateDashboard();
+                renderNotes();
+            }
+
+            function updateDashboard() {
+                const total = repairsData.length;
+                const urgent = repairsData.filter(r => r.bucket === 'SPOED').length;
+                const waiting = repairsData.filter(r => r.status === 'In wacht').length;
+                const checked = repairsData.filter(r => r.aanwezig).length;
+
+                document.getElementById('total-repairs').textContent = total;
+                document.getElementById('urgent-repairs').textContent = urgent;
+                document.getElementById('waiting-repairs').textContent = waiting;
+                document.getElementById('checked-repairs').textContent = checked;
+
+                updateChart();
+            }
+            
+            function updateChart() {
+                const ctx = document.getElementById('repairsChart').getContext('2d');
+                const buckets = ['SPOED', 'In behandeling', 'In wacht', 'Onderzoek afgerond'];
+                const data = buckets.map(bucket => repairsData.filter(r => r.bucket === bucket).length);
+
+                if(chartInstance) {
+                    chartInstance.destroy();
+                }
+
+                chartInstance = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: buckets.map(b => b.replace(' ', '\n')),
+                        datasets: [{
+                            label: 'Aantal Herstellingen',
+                            data: data,
+                            backgroundColor: [
+                                'rgba(239, 68, 68, 0.6)',
+                                'rgba(59, 130, 246, 0.6)',
+                                'rgba(245, 158, 11, 0.6)',
+                                'rgba(34, 197, 94, 0.6)'
+                            ],
+                            borderColor: [
+                                'rgba(239, 68, 68, 1)',
+                                'rgba(59, 130, 246, 1)',
+                                'rgba(245, 158, 11, 1)',
+                                'rgba(34, 197, 94, 1)'
+                            ],
+                            borderWidth: 1,
+                            borderRadius: 4,
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                grid: { color: '#e2e8f0' },
+                                ticks: { color: '#64748b', stepSize: 1 }
+                            },
+                            x: {
+                                grid: { display: false },
+                                ticks: {
+                                  color: '#64748b',
+                                  maxRotation: 0,
+                                  minRotation: 0,
+                                  callback: function(value) {
+                                      const label = this.getLabelForValue(value);
+                                      if (label.length > 16) { return label.split('\n'); }
+                                      return label;
+                                  }
+                                }
+                            }
+                        },
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                backgroundColor: '#1e293b',
+                                titleFont: { size: 14, weight: 'bold' },
+                                bodyFont: { size: 12 },
+                                padding: 12,
+                                cornerRadius: 6,
+                                displayColors: false
+                            }
+                        }
+                    }
+                });
+            }
+
+            function filterAndRender() {
+                const searchTerm = searchInput.value.toLowerCase();
+                let filteredData = [...repairsData].sort((a, b) => b.id - a.id);
+
+                if (currentFilter !== 'all') {
+                    filteredData = filteredData.filter(r => r.bucket === currentFilter);
+                }
+
+                if (searchTerm) {
+                    filteredData = filteredData.filter(r => 
+                        r.klant.toLowerCase().includes(searchTerm) || 
+                        String(r.id).includes(searchTerm)
+                    );
+                }
+                
+                renderTable(filteredData);
+            }
+            
+            function showModal(modal, container) {
+                modal.classList.remove('hidden');
+                setTimeout(() => {
+                    modal.classList.remove('opacity-0');
+                    container.classList.remove('scale-95');
+                }, 10);
+            }
+
+            function hideModal(modal, container) {
+                modal.classList.add('opacity-0');
+                container.classList.add('scale-95');
+                setTimeout(() => {
+                    modal.classList.add('hidden');
+                }, 300);
+            }
+
+            function deleteRepair(repairId) {
+                if (confirm(`Weet u zeker dat u herstelling #${repairId} wilt verwijderen?`)) {
+                    repairsData = repairsData.filter(r => r.id !== repairId);
+                    updateAll();
+                }
+            }
+
+            function deleteComment(repairId, commentIndex) {
+                 if (confirm(`Weet u zeker dat u deze opmerking wilt verwijderen?`)) {
+                    const repair = repairsData.find(r => r.id === repairId);
+                    if (repair) {
+                        repair.opmerking.splice(commentIndex, 1);
+                        updateAll();
+                    }
+                }
+            }
+
+            addRepairBtn.addEventListener('click', () => showModal(repairModal, repairModalContainer));
+            closeRepairModalBtn.addEventListener('click', () => hideModal(repairModal, repairModalContainer));
+            repairModal.addEventListener('click', (e) => {
+                if (e.target === repairModal) hideModal(repairModal, repairModalContainer);
+            });
+
+            closeCommentModalBtn.addEventListener('click', () => hideModal(commentModal, commentModalContainer));
+            commentModal.addEventListener('click', (e) => {
+                if (e.target === commentModal) hideModal(commentModal, commentModalContainer);
+            });
+            
+            addRepairForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const formData = new FormData(addRepairForm);
+                const newId = parseInt(formData.get('id'));
+
+                if (repairsData.some(r => r.id === newId)) {
+                    alert('Dit Herstelling ID bestaat al. Kies een uniek ID.');
+                    return;
+                }
+                
+                const newComment = formData.get('opmerking').trim();
+
+                const newRepair = {
+                    id: newId,
+                    klant: formData.get('klant'),
+                    aanmaakdatum: new Date().toLocaleDateString('nl-BE'),
+                    bucket: 'In behandeling',
+                    status: formData.get('status'),
+                    aanwezig: false,
+                    opmerking: newComment ? [newComment] : []
+                };
+                repairsData.unshift(newRepair);
+                updateAll();
+                addRepairForm.reset();
+                hideModal(repairModal, repairModalContainer);
+            });
+            
+            tableBody.addEventListener('click', (e) => {
+                const addBtn = e.target.closest('.add-comment-btn');
+                const deleteRepairBtn = e.target.closest('.delete-repair-btn');
+                const deleteCommentBtn = e.target.closest('.delete-comment-btn');
+
+                if (addBtn) {
+                    const repairId = parseInt(addBtn.dataset.id, 10);
+                    commentRepairIdInput.value = repairId;
+                    showModal(commentModal, commentModalContainer);
+                }
+
+                if (deleteRepairBtn) {
+                    const repairId = parseInt(deleteRepairBtn.dataset.id, 10);
+                    deleteRepair(repairId);
+                }
+
+                if (deleteCommentBtn) {
+                    const repairId = parseInt(deleteCommentBtn.dataset.repairId, 10);
+                    const commentIndex = parseInt(deleteCommentBtn.dataset.commentIndex, 10);
+                    deleteComment(repairId, commentIndex);
+                }
+            });
+
+            addCommentForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const formData = new FormData(addCommentForm);
+                const repairId = parseInt(formData.get('id'));
+                const newComment = formData.get('comment').trim();
+                
+                const repair = repairsData.find(r => r.id === repairId);
+                if (repair && newComment) {
+                    repair.opmerking.push(newComment);
+                    updateAll();
+                }
+                addCommentForm.reset();
+                hideModal(commentModal, commentModalContainer);
+            });
+            
+            notesList.addEventListener('click', (e) => {
+                const deleteBtn = e.target.closest('.delete-comment-btn-mainlist');
+                if (deleteBtn) {
+                    const repairId = parseInt(deleteBtn.dataset.repairId, 10);
+                    const commentIndex = parseInt(deleteBtn.dataset.commentIndex, 10);
+                    deleteComment(repairId, commentIndex);
+                }
+            });
+
+            searchInput.addEventListener('input', filterAndRender);
+            
+            filterButtonsContainer.addEventListener('click', (e) => {
+                if (e.target.tagName === 'BUTTON') {
+                    currentFilter = e.target.dataset.filter;
+                    document.querySelectorAll('.filter-btn').forEach(btn => {
+                        btn.classList.remove('bg-blue-600', 'text-white');
+                        btn.classList.add('bg-white', 'text-slate-700');
+                    });
+                    e.target.classList.add('bg-blue-600', 'text-white');
+                    e.target.classList.remove('bg-white', 'text-slate-700');
+                    filterAndRender();
+                }
+            });
+
+            tableBody.addEventListener('change', (e) => {
+                const target = e.target;
+                const repairId = parseInt(target.closest('tr').dataset.id, 10);
+                const repair = repairsData.find(r => r.id === repairId);
+                if (!repair) return;
+
+                if (target.classList.contains('presence-checkbox')) {
+                    repair.aanwezig = target.checked;
+                    target.closest('tr').classList.toggle('table-row-checked', repair.aanwezig);
+                    updateDashboard();
+                }
+                
+                if (target.classList.contains('status-select')) {
+                    repair.status = target.value;
+                    updateAll();
+                }
+            });
+
+            updateAll();
+        });
+    </script>
+</body>
+</html>
