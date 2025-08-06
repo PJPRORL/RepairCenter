@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Controlepaneel Herstellingen</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: Calm Neutral Blue -->
+    <!-- Application Structure Plan: A dashboard-style SPA. The top section features key metrics and a bar chart for a quick overview of workloads per category (bucket). Below this, a control panel with filters for each bucket and a search bar allows for dynamic querying. The main content is an interactive table displaying the repair items. This structure is chosen for usability, allowing users to get a high-level overview first, then drill down into specific categories or search for items, which is more efficient than a static list. -->
+    <!-- Visualization & Content Choices: Report Info (Repair List) -> Goal (Track status & physical presence) -> Viz/Presentation (Interactive Table, Bar Chart) -> Interaction (Filtering by bucket, live search, status dropdowns, presence checkboxes, inline comments) -> Justification (Provides both a macro view via the chart and micro-management capabilities via the interactive table, directly addressing the user's need for efficient tracking) -> Library/Method (Chart.js for the bar chart, Vanilla JS for all interactions) - Confirming NO SVG/Mermaid. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc; /* slate-50 */
+        }
+        .table-row-checked {
+            background-color: #f0fdf4; /* green-50 */
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-weight: 500;
+            font-size: 0.75rem;
+            text-transform: capitalize;
+        }
+        .status-in-behandeling { background-color: #dbeafe; color: #1e40af; }
+        .status-in-wacht { background-color: #feefc7; color: #92400e; }
+        .status-rma { background-color: #fee2e2; color: #991b1b; }
+        .status-afgewerkt { background-color: #dcfce7; color: #166534; }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 300px;
+            max-height: 400px;
+        }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 350px;
+            }
+        }
+    </style>
+</head>
+<body class="text-slate-800">
+
+    <div class="container mx-auto p-4 sm:p-6 lg:p-8">
+        <header class="mb-8">
+            <h1 class="text-3xl font-bold text-slate-900">Dashboard Herstellingen</h1>
+            <p class="text-slate-600 mt-1">Een interactief overzicht van alle openstaande herstellingen.</p>
+        </header>
+
+        <main class="space-y-8">
+            
+            <section id="overview-section">
+                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                        <h3 class="text-sm font-medium text-slate-500">Totaal Open</h3>
+                        <p id="total-repairs" class="text-3xl font-bold text-slate-900 mt-2">0</p>
+                    </div>
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                        <h3 class="text-sm font-medium text-slate-500">Spoed</h3>
+                        <p id="urgent-repairs" class="text-3xl font-bold text-red-600 mt-2">0</p>
+                    </div>
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                        <h3 class="text-sm font-medium text-slate-500">In Wacht</h3>
+                        <p id="waiting-repairs" class="text-3xl font-bold text-amber-600 mt-2">0</p>
+                    </div>
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                        <h3 class="text-sm font-medium text-slate-500">Fysiek Geverifieerd</h3>
+                        <p id="checked-repairs" class="text-3xl font-bold text-green-600 mt-2">0</p>
+                    </div>
+                </div>
+            </section>
+
+            <section id="chart-section" class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                <h2 class="text-xl font-semibold text-slate-900 mb-4">Werkdruk per Categorie</h2>
+                <p class="text-slate-600 mb-6">Dit diagram toont het aantal openstaande herstellingen per 'bucket'. Gebruik dit om een snel beeld te krijgen van waar de meeste taken zich bevinden.</p>
+                <div class="chart-container">
+                    <canvas id="repairsChart"></canvas>
+                </div>
+            </section>
+
+            <section id="repairs-list-section" class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                <h2 class="text-xl font-semibold text-slate-900 mb-4">Controlelijst Herstellingen</h2>
+                <p class="text-slate-600 mb-6">Gebruik de filters en de zoekbalk om specifieke herstellingen te vinden. U kunt de status direct aanpassen en afvinken of het toestel fysiek aanwezig is.</p>
+
+                <div class="flex flex-col md:flex-row gap-4 mb-6">
+                    <div class="relative flex-grow">
+                        <span class="absolute inset-y-0 left-0 flex items-center pl-3">
+                            <svg class="w-5 h-5 text-slate-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"></path></svg>
+                        </span>
+                        <input type="text" id="search-input" placeholder="Zoek op ID of klant..." class="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition">
+                    </div>
+                    <div id="filter-buttons" class="flex items-center gap-2 flex-wrap">
+                        <button data-filter="all" class="filter-btn bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold shadow-sm transition">Alles</button>
+                        <button data-filter="SPOED" class="filter-btn bg-white text-slate-700 px-4 py-2 rounded-lg font-semibold border border-slate-300 hover:bg-slate-100 transition">Spoed</button>
+                        <button data-filter="In behandeling" class="filter-btn bg-white text-slate-700 px-4 py-2 rounded-lg font-semibold border border-slate-300 hover:bg-slate-100 transition">In behandeling</button>
+                        <button data-filter="In wacht" class="filter-btn bg-white text-slate-700 px-4 py-2 rounded-lg font-semibold border border-slate-300 hover:bg-slate-100 transition">In wacht</button>
+                        <button data-filter="Onderzoek afgerond" class="filter-btn bg-white text-slate-700 px-4 py-2 rounded-lg font-semibold border border-slate-300 hover:bg-slate-100 transition">Onderzoek afgerond</button>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left text-slate-500">
+                        <thead class="text-xs text-slate-700 uppercase bg-slate-100">
+                            <tr>
+                                <th scope="col" class="px-6 py-3 rounded-l-lg">ID</th>
+                                <th scope="col" class="px-6 py-3">Klant</th>
+                                <th scope="col" class="px-6 py-3">Aanmaakdatum</th>
+                                <th scope="col" class="px-6 py-3">Huidige Status</th>
+                                <th scope="col" class="px-6 py-3">Opmerkingen</th>
+                                <th scope="col" class="px-6 py-3 text-center rounded-r-lg">Fysiek Aanwezig?</th>
+                            </tr>
+                        </thead>
+                        <tbody id="repairs-table-body">
+                        </tbody>
+                    </table>
+                </div>
+                 <p id="no-results" class="text-center text-slate-500 py-8 hidden">Geen resultaten gevonden.</p>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const repairsData = [
+                { id: 81731, klant: 'Thys, Joren', aanmaakdatum: '05/08/2025', bucket: 'SPOED', status: 'In behandeling', aanwezig: false, opmerking: '' },
+                { id: 81729, klant: 'Willems, Pieter', aanmaakdatum: '05/08/2025', bucket: 'SPOED', status: 'In behandeling', aanwezig: false, opmerking: 'Wacht op specifiek onderdeel' },
+                { id: 81728, klant: 'Coppens, Bart', aanmaakdatum: '04/08/2025', bucket: 'In behandeling', status: 'In behandeling', aanwezig: false, opmerking: '' },
+                { id: 81727, klant: 'Peeters, Greet', aanmaakdatum: '04/08/2025', bucket: 'In behandeling', status: 'In behandeling', aanwezig: false, opmerking: '' },
+                { id: 81726, klant: 'Verhoeven, An', aanmaakdatum: '04/08/2025', bucket: 'In behandeling', status: 'In behandeling', aanwezig: false, opmerking: '' },
+                { id: 81725, klant: 'De Smet, Jan', aanmaakdatum: '04/08/2025', bucket: 'In behandeling', status: 'In behandeling', aanwezig: false, opmerking: '' },
+                { id: 81724, klant: 'Mertens, Sofie', aanmaakdatum: '01/08/2025', bucket: 'In wacht', status: 'In wacht', aanwezig: false, opmerking: 'Klant gecontacteerd' },
+                { id: 81723, klant: 'Claes, Tom', aanmaakdatum: '01/08/2025', bucket: 'In wacht', status: 'In wacht', aanwezig: false, opmerking: '' },
+                { id: 81722, klant: 'Wouters, Els', aanmaakdatum: '31/07/2025', bucket: 'Onderzoek afgerond', status: 'Afgewerkt', aanwezig: false, opmerking: 'Klaar voor ophaling' },
+                { id: 81721, klant: 'Jacobs, Dirk', aanmaakdatum: '31/07/2025', bucket: 'Onderzoek afgerond', status: 'RMA', aanwezig: false, opmerking: 'Verzonden naar fabrikant' }
+            ];
+
+            const statusOptions = ['In behandeling', 'In wacht', 'RMA', 'Afgewerkt'];
+            const statusColors = {
+                'In behandeling': 'status-in-behandeling',
+                'In wacht': 'status-in-wacht',
+                'RMA': 'status-rma',
+                'Afgewerkt': 'status-afgewerkt'
+            };
+
+            const tableBody = document.getElementById('repairs-table-body');
+            const searchInput = document.getElementById('search-input');
+            const filterButtonsContainer = document.getElementById('filter-buttons');
+            const noResultsMessage = document.getElementById('no-results');
+            
+            let currentFilter = 'all';
+            let chartInstance = null;
+
+            function renderTable(data) {
+                tableBody.innerHTML = '';
+                if (data.length === 0) {
+                    noResultsMessage.classList.remove('hidden');
+                    tableBody.classList.add('hidden');
+                } else {
+                    noResultsMessage.classList.add('hidden');
+                    tableBody.classList.remove('hidden');
+                }
+
+                data.forEach(repair => {
+                    const row = document.createElement('tr');
+                    row.className = `bg-white border-b hover:bg-slate-50 transition ${repair.aanwezig ? 'table-row-checked' : ''}`;
+                    row.dataset.id = repair.id;
+
+                    const selectOptions = statusOptions.map(option =>
+                        `<option value="${option}" ${repair.status === option ? 'selected' : ''}>${option}</option>`
+                    ).join('');
+                    
+                    const statusBadgeClass = statusColors[repair.status] || 'bg-slate-200 text-slate-800';
+
+                    row.innerHTML = `
+                        <td class="px-6 py-4 font-medium text-slate-900 whitespace-nowrap">${repair.id}</td>
+                        <td class="px-6 py-4">${repair.klant}</td>
+                        <td class="px-6 py-4">${repair.aanmaakdatum}</td>
+                        <td class="px-6 py-4">
+                            <div class="flex items-center gap-2">
+                                <span class="status-badge ${statusBadgeClass}">${repair.status}</span>
+                                <select class="status-select border-slate-300 rounded-md text-xs p-1" data-id="${repair.id}">
+                                    ${selectOptions}
+                                </select>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4">
+                            <input type="text" class="comment-input w-full p-1 bg-white border-b border-slate-200 focus:outline-none focus:border-blue-500 transition" placeholder="Voeg notitie toe..." value="${repair.opmerking}" data-id="${repair.id}">
+                        </td>
+                        <td class="px-6 py-4 text-center">
+                            <input type="checkbox" class="presence-checkbox h-5 w-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500" data-id="${repair.id}" ${repair.aanwezig ? 'checked' : ''}>
+                        </td>
+                    `;
+                    tableBody.appendChild(row);
+                });
+            }
+
+            function updateDashboard() {
+                const total = repairsData.length;
+                const urgent = repairsData.filter(r => r.bucket === 'SPOED').length;
+                const waiting = repairsData.filter(r => r.status === 'In wacht').length;
+                const checked = repairsData.filter(r => r.aanwezig).length;
+
+                document.getElementById('total-repairs').textContent = total;
+                document.getElementById('urgent-repairs').textContent = urgent;
+                document.getElementById('waiting-repairs').textContent = waiting;
+                document.getElementById('checked-repairs').textContent = checked;
+
+                updateChart();
+            }
+            
+            function updateChart() {
+                const ctx = document.getElementById('repairsChart').getContext('2d');
+                const buckets = ['SPOED', 'In behandeling', 'In wacht', 'Onderzoek afgerond'];
+                const data = buckets.map(bucket => repairsData.filter(r => r.bucket === bucket).length);
+
+                if(chartInstance) {
+                    chartInstance.destroy();
+                }
+
+                chartInstance = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: buckets.map(b => b.replace(' ', '\n')),
+                        datasets: [{
+                            label: 'Aantal Herstellingen',
+                            data: data,
+                            backgroundColor: [
+                                'rgba(239, 68, 68, 0.6)',
+                                'rgba(59, 130, 246, 0.6)',
+                                'rgba(245, 158, 11, 0.6)',
+                                'rgba(34, 197, 94, 0.6)'
+                            ],
+                            borderColor: [
+                                'rgba(239, 68, 68, 1)',
+                                'rgba(59, 130, 246, 1)',
+                                'rgba(245, 158, 11, 1)',
+                                'rgba(34, 197, 94, 1)'
+                            ],
+                            borderWidth: 1,
+                            borderRadius: 4,
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                grid: {
+                                    color: '#e2e8f0'
+                                },
+                                ticks: {
+                                    color: '#64748b',
+                                    stepSize: 1
+                                }
+                            },
+                            x: {
+                                grid: {
+                                    display: false
+                                },
+                                ticks: {
+                                  color: '#64748b',
+                                  maxRotation: 0,
+                                  minRotation: 0,
+                                  callback: function(value) {
+                                      const label = this.getLabelForValue(value);
+                                      if (label.length > 16) {
+                                          return label.split('\n');
+                                      }
+                                      return label;
+                                  }
+                                }
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                display: false
+                            },
+                            tooltip: {
+                                backgroundColor: '#1e293b',
+                                titleFont: { size: 14, weight: 'bold' },
+                                bodyFont: { size: 12 },
+                                padding: 12,
+                                cornerRadius: 6,
+                                displayColors: false
+                            }
+                        }
+                    }
+                });
+            }
+
+            function filterAndRender() {
+                const searchTerm = searchInput.value.toLowerCase();
+                let filteredData = repairsData;
+
+                if (currentFilter !== 'all') {
+                    filteredData = filteredData.filter(r => r.bucket === currentFilter);
+                }
+
+                if (searchTerm) {
+                    filteredData = filteredData.filter(r => 
+                        r.klant.toLowerCase().includes(searchTerm) || 
+                        String(r.id).includes(searchTerm)
+                    );
+                }
+                
+                renderTable(filteredData);
+            }
+
+            searchInput.addEventListener('input', filterAndRender);
+            
+            filterButtonsContainer.addEventListener('click', (e) => {
+                if (e.target.tagName === 'BUTTON') {
+                    currentFilter = e.target.dataset.filter;
+                    document.querySelectorAll('.filter-btn').forEach(btn => {
+                        btn.classList.remove('bg-blue-600', 'text-white');
+                        btn.classList.add('bg-white', 'text-slate-700');
+                    });
+                    e.target.classList.add('bg-blue-600', 'text-white');
+                    e.target.classList.remove('bg-white', 'text-slate-700');
+                    filterAndRender();
+                }
+            });
+
+            tableBody.addEventListener('change', (e) => {
+                const target = e.target;
+                const repairId = parseInt(target.dataset.id, 10);
+                const repair = repairsData.find(r => r.id === repairId);
+                if (!repair) return;
+
+                if (target.classList.contains('presence-checkbox')) {
+                    repair.aanwezig = target.checked;
+                    const row = target.closest('tr');
+                    row.classList.toggle('table-row-checked', repair.aanwezig);
+                }
+                
+                if (target.classList.contains('status-select')) {
+                    repair.status = target.value;
+                    filterAndRender();
+                }
+                
+                updateDashboard();
+            });
+
+            tableBody.addEventListener('input', (e) => {
+                const target = e.target;
+                if (target.classList.contains('comment-input')) {
+                    const repairId = parseInt(target.dataset.id, 10);
+                    const repair = repairsData.find(r => r.id === repairId);
+                    if (repair) {
+                        repair.opmerking = target.value;
+                    }
+                }
+            });
+
+            filterAndRender();
+            updateDashboard();
+        });
+    </script>
+</body>
+</html>
