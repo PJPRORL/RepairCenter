@@ -1,0 +1,107 @@
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: #f8fafc; /* slate-50 */
+}
+.table-row-checked {
+    background-color: #f0fdf4; /* green-50 */
+}
+.status-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-weight: 500;
+    font-size: 0.75rem;
+    text-transform: capitalize;
+}
+.status-spoed { background-color: #fecaca; color: #b91c1c; }
+.status-in-behandeling { background-color: #dbeafe; color: #1e40af; }
+.status-in-wacht { background-color: #fef08a; color: #854d0e; }
+.status-rma { background-color: #fee2e2; color: #991b1b; }
+.status-afgewerkt { background-color: #dcfce7; color: #166534; }
+.chart-container {
+    position: relative;
+    width: 100%;
+    max-width: 600px;
+    margin-left: auto;
+    margin-right: auto;
+    height: 300px;
+    max-height: 400px;
+}
+.modal-overlay {
+    transition: opacity 0.3s ease;
+}
+.modal-container {
+    transition: transform 0.3s ease;
+}
+details > summary {
+    list-style: none;
+}
+details > summary::-webkit-details-marker {
+    display: none;
+}
+@media (min-width: 768px) {
+    .chart-container {
+        height: 350px;
+    }
+}
+@media print {
+body {
+    background-color: white;
+}
+header, #overview-section, #chart-section, #notes-section, .modal-overlay, #repairs-list-section > .flex, #repairs-list-section > p, #add-repair-btn, #print-btn, #notification-banner {
+    display: none;
+}
+#repairs-list-section {
+    border: none;
+    box-shadow: none;
+    padding: 0;
+    margin: 0;
+}
+.status-select, td:last-child, th:last-child, .delete-comment-btn {
+    display: none;
+}
+details {
+    page-break-inside: avoid;
+}
+details summary {
+    display: none;
+}
+details .comments-list {
+    position: static;
+    display: block;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+    margin-top: 4px;
+    list-style-type: disc;
+    list-style-position: inside;
+}
+details .comments-list li {
+    padding: 2px 0;
+    font-size: 9pt;
+    background-color: transparent;
+    color: black;
+}
+    .presence-checkbox {
+    visibility: visible;
+    height: 1rem;
+    width: 1rem;
+    border: 1px solid #000;
+    -webkit-appearance: none;
+    appearance: none;
+    border-radius: .25rem;
+    display: inline-block;
+    position: relative;
+}
+.presence-checkbox:checked::before {
+    content: '✔';
+    position: absolute;
+    top: -4px;
+    left: 1px;
+    font-size: 14px;
+}
+@page {
+    size: A4;
+    margin: 0.75in;
+}
+}
