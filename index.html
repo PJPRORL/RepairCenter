@@ -10,7 +10,7 @@
     <link id="favicon" rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='0.9em' font-size='90'%3E📋%3C/text%3E%3C/svg%3E">
     <!-- Chosen Palette: Calm Neutral Blue -->
     <!-- Application Structure Plan: A dashboard-style SPA. The top section features key metrics and a bar chart for a quick overview of workloads per category (bucket). Below this, a control panel with filters for each bucket and a search bar allows for dynamic querying. The main content is an interactive table displaying the repair items with integrated dropdowns for comments and action buttons. A modal form for adding new repairs keeps the UI clean. A final section summarizes all notes for a quick review. This structure is chosen for usability, allowing users to get a high-level overview first, then drill down, add, or delete items and comments efficiently. -->
-    <!-- Visualization & Content Choices: Report Info (Repair List) -> Goal (Full CRUD: Track, add, delete repairs/comments, print list, in-browser notifications with favicon indicator) -> Viz/Presentation (Interactive Table, Bar Chart, Modals, Notes List, Details/Summary dropdown, Notification Banner) -> Interaction (Filtering, search, status changes, checkboxes, modals for adding, confirmation for deleting, comment dropdowns, print button) -> Justification (Provides a complete data management lifecycle within a single, intuitive interface, fulfilling all user requirements including offline use and status alerts.) -> Library/Method (Chart.js for the bar chart, Vanilla JS for all interactions) - Confirming NO SVG/Mermaid. -->
+    <!-- Visualization & Content Choices: Report Info (Repair List) -> Goal (Full CRUD: Track, add, delete repairs/comments, print list, in-browser notifications with favicon indicator, persistent storage) -> Viz/Presentation (Interactive Table, Bar Chart, Modals, Notes List, Details/Summary dropdown, Notification Banner) -> Interaction (Filtering, search, status changes, checkboxes, modals for adding, confirmation for deleting, comment dropdowns, print button) -> Justification (Provides a complete data management lifecycle with persistent state via localStorage within a single, intuitive interface, fulfilling all user requirements including offline use and status alerts.) -> Library/Method (Chart.js for the bar chart, Vanilla JS for all interactions) - Confirming NO SVG/Mermaid. -->
     <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
     <style>
         body {
@@ -295,7 +295,8 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', function () {
-            let repairsData = [
+            
+            const initialData = [
                 { id: 81731, klant: 'Thys, Joren', lastUpdated: '2025-08-05T12:00:00.000Z', status: 'SPOED', aanwezig: false, opmerking: [] },
                 { id: 81729, klant: 'Willems, Pieter', lastUpdated: '2025-08-05T11:00:00.000Z', status: 'SPOED', aanwezig: false, opmerking: ['Wacht op specifiek onderdeel'] },
                 { id: 81728, klant: 'Coppens, Bart', lastUpdated: '2025-08-04T10:00:00.000Z', status: 'In behandeling', aanwezig: false, opmerking: [] },
@@ -307,6 +308,8 @@
                 { id: 81722, klant: 'Wouters, Els', lastUpdated: '2025-07-31T11:00:00.000Z', status: 'Afgewerkt', aanwezig: false, opmerking: ['Klaar voor ophaling'] },
                 { id: 81721, klant: 'Jacobs, Dirk', lastUpdated: '2025-07-31T10:00:00.000Z', status: 'RMA', aanwezig: false, opmerking: ['Verzonden naar fabrikant'] }
             ];
+
+            let repairsData = [];
 
             const statusOptions = ['SPOED', 'In behandeling', 'In wacht', 'RMA', 'Afgewerkt'];
             const statusColors = {
@@ -344,6 +347,19 @@
 
             let currentFilter = 'all';
             let chartInstance = null;
+
+            function saveData() {
+                localStorage.setItem('herstellingenData', JSON.stringify(repairsData));
+            }
+
+            function loadData() {
+                const savedData = localStorage.getItem('herstellingenData');
+                if (savedData) {
+                    repairsData = JSON.parse(savedData);
+                } else {
+                    repairsData = initialData;
+                }
+            }
 
             function renderTable(data) {
                 tableBody.innerHTML = '';
@@ -445,6 +461,7 @@
             }
 
             function updateAll() {
+                saveData();
                 checkOverdueRepairs();
                 filterAndRender();
                 updateDashboard();
@@ -539,7 +556,7 @@
 
             function filterAndRender() {
                 const searchTerm = searchInput.value.toLowerCase();
-                let filteredData = [...repairsData].sort((a, b) => b.id - a.id);
+                let filteredData = [...repairsData].sort((a, b) => new Date(b.lastUpdated) - new Date(a.lastUpdated));
 
                 if (currentFilter !== 'all') {
                     filteredData = filteredData.filter(r => r.status === currentFilter);
@@ -583,6 +600,7 @@
                     const repair = repairsData.find(r => r.id === repairId);
                     if (repair) {
                         repair.opmerking.splice(commentIndex, 1);
+                        repair.lastUpdated = new Date().toISOString();
                         updateAll();
                     }
                 }
@@ -736,7 +754,7 @@
 
                 if (target.classList.contains('presence-checkbox')) {
                     repair.aanwezig = target.checked;
-                    target.closest('tr').classList.toggle('table-row-checked', repair.aanwezig);
+                    saveData();
                     updateDashboard();
                 }
                 
@@ -751,6 +769,7 @@
                 window.print();
             });
 
+            loadData();
             updateAll();
         });
     </script>
