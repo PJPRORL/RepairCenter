@@ -1,17 +1,8 @@
+import {ophalenGegevens} from 'scripts/fetchApi.js'
+
 document.addEventListener('DOMContentLoaded', function () {
             
-    const initialData = [
-        { id: 81731, klant: 'Thys, Joren', lastUpdated: '2025-08-05T12:00:00.000Z', status: 'SPOED', aanwezig: false, opmerking: [] },
-        { id: 81729, klant: 'Willems, Pieter', lastUpdated: '2025-08-05T11:00:00.000Z', status: 'SPOED', aanwezig: false, opmerking: ['Wacht op specifiek onderdeel'] },
-        { id: 81728, klant: 'Coppens, Bart', lastUpdated: '2025-08-04T10:00:00.000Z', status: 'In behandeling', aanwezig: false, opmerking: [] },
-        { id: 81727, klant: 'Peeters, Greet', lastUpdated: '2025-08-04T09:00:00.000Z', status: 'In behandeling', aanwezig: false, opmerking: [] },
-        { id: 81726, klant: 'Verhoeven, An', lastUpdated: '2025-08-01T15:00:00.000Z', status: 'In behandeling', aanwezig: false, opmerking: [] },
-        { id: 81725, klant: 'De Smet, Jan', lastUpdated: '2025-08-01T14:00:00.000Z', status: 'In behandeling', aanwezig: false, opmerking: [] },
-        { id: 81724, klant: 'Mertens, Sofie', lastUpdated: '2025-08-01T13:00:00.000Z', status: 'In wacht', aanwezig: false, opmerking: ['Klant gecontacteerd'] },
-        { id: 81723, klant: 'Claes, Tom', lastUpdated: '2025-07-31T12:00:00.000Z', status: 'In wacht', aanwezig: false, opmerking: [] },
-        { id: 81722, klant: 'Wouters, Els', lastUpdated: '2025-07-31T11:00:00.000Z', status: 'Afgewerkt', aanwezig: false, opmerking: ['Klaar voor ophaling'] },
-        { id: 81721, klant: 'Jacobs, Dirk', lastUpdated: '2025-07-31T10:00:00.000Z', status: 'RMA', aanwezig: false, opmerking: ['Verzonden naar fabrikant'] }
-    ];
+    const initialData = [];
 
     let repairsData = [];
 
