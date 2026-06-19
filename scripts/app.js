@@ -1,6 +1,8 @@
 import {ophalenGegevens} from 'scripts/fetchApi.js'
 
-document.addEventListener('DOMContentLoaded', function () {
+ophalenGegevens();
+
+/*document.addEventListener('DOMContentLoaded', function () {
 
     const initialData = [];
 
@@ -467,3 +469,4 @@ document.addEventListener('DOMContentLoaded', function () {
     loadData();
     updateAll();
 });
+*/
